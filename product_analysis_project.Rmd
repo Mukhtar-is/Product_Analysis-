@@ -1,0 +1,331 @@
+---
+title: "Product Analysis"
+author: "Mukhtaar Ismail"
+date: "2024-09-10"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Install and load necessary  packages. 
+I'll use "tidyverse" package because of there a lot of important packages include dplyr package wich we will use data manipulation. 
+
+
+```{r message=FALSE, warning=FALSE}
+
+require("tidyverse")
+#install.packages("tidyverse")
+#install.packages("naniar") # for dealing missing data (NA) data
+#install.packages("SmartEDA")
+#install.packages("ggcorrplot")
+
+# Load necessary library
+library("tidyverse")
+library("lubridate")
+library("magrittr")  # provides pipe operator, %>%, which allows you to chain functions together
+library("naniar")    # exploring and dealing missing data
+#library("dlookr")  # To visualizes the histogram of numeric data or relationship to specific categorical data. I don't use here
+library("SmartEDA")
+library("ggcorrplot")
+
+
+```
+
+## LET'S LOAD THE DATASET
+
+```{r}
+# read the data
+store <-read.csv("Data/DEPARTMENTAL_STORE.csv")
+head(store)
+
+```
+
+## Let's Manipulate and Transform data
+
+### let's glimpse the data to know more about the structure of the data
+
+```{r}
+str(store)
+glimpse(store)
+dim(store)
+```
+
+There is 550 rows and 8 variables. 'COMPANY' and 'PRODUCT_TYPE' variables are chr type 
+instead of factor, let's convert into factor type.
+
+```{r}
+store$COMPANY <- as.factor(store$COMPANY)
+store$PRODUCT_TYPE <- as.factor(store$PRODUCT_TYPE)
+
+# let's view the data type
+glimpse(store) # both now are factor type
+```
+Now the two variables are factor type.
+
+
+### Adding columns in data
+
+The data contains details of products from May, 2020, a period marked by covid-19.
+there is no date variable, so let's create datetime column from May 1 to May 30 2020 hour interval. I used 550 values since their is 744 hours in the month to match rows of the data.
+
+```{r}
+# Define start and end dates
+start_date <- ymd_hms("2020-05-01 00:00:00")
+end_date <- ymd_hms("2020-05-31 23:00:00")
+
+# Generate sequence of datetime values in hourly intervals
+datetime_sequence <- seq(start_date, end_date, by = "hour")
+
+#create datetime column in store
+store <- mutate(store, Datetime = datetime_sequence[1:550])
+head(store)
+```
+
+
+#### let's add one more columns to show profit, profit percent, and net profit of the products.
+
+```{r}
+# add column to show the profit
+store <- store %>% mutate(PROFIT= SELLING_PRICE - COST_PRICE)
+
+# add column to show the profit percent
+store <- store %>% mutate(PROFIT_PERCENT= (PROFIT / COST_PRICE) *100)
+
+# add column to show the net profit
+store <- store %>% mutate(NET_PROFIT=PROFIT*QUANTITY_DEMANDED)
+
+head(store)
+```
+
+
+### Rearrarange Columns Order Using dplyr's Relocate Function.
+
+Rearranging columns in a meaningful order can make analyses simpler. Let's put datetime column in the first column.
+
+```{r}
+store <- store %>% relocate(Datetime, .before = UNIQUE_ID)
+head(store)
+```
+
+### DEALING WITH MISSING VALUE
+Identifying the Pattern of Missing Values
+When exploring a new dataset, it's worthwhile to identify the pattern of missing values. The `summary()` includes the number of missing values for each column along with the summary statistics.
+
+```{r}
+summary(store)
+
+# find to of missing values
+sum_missing_values <- sum(is.na(store))
+print(paste("The total of missing values are:", sum_missing_values))  # 0
+
+# summary of missing variables
+miss_var_summary(store)
+```
+
+As shown the result, there is no missing values. If a column has a large percentage of missing values, then you may want to consider dropping that column all together. However, if you are really interested in the effect of that column, then a better idea is to remove the observations that have missing values.
+
+
+### Identifying Distinct Values Using dplyr's Distinct Function
+The `distinct` function returns only the unique values from a column.
+
+```{r}
+dim(distinct(store))
+
+```
+As shown the result, all the values are unique.
+
+
+
+### Save the updates file
+```{r}
+# Save up the updates for reusing. Uncomment if want to run
+#write.table(store, file = "Updated_store_data.csv", sep=",")
+```
+
+
+
+
+
+## Let's Spot patterns and problems using graphs and visualizations
+
+What is the AVERAGE_QUANTITY of PRODUCT_TYPE
+```{r}
+#PLOT FOR AVERAGE_QUANTITY & PRODUCT_TYPE
+store %>% group_by(PRODUCT_TYPE) %>% 
+  summarise(AVERAGE_QUANTITY=mean(QUANTITY_DEMANDED),
+            AVERAGE_NET_PROFIT=mean(NET_PROFIT)) %>%
+  ggplot(aes(x=PRODUCT_TYPE, y=AVERAGE_QUANTITY))+geom_col(width=0.6, fill="lightblue")+
+  labs(x="PRODUCT TYPE", y="AVERAGE QUANTITY", title = "Average quantity of product type")+
+  theme(text= element_text(size=8))
+
+  
+```
+
+Let's plot the Average Net Profit of Product Type
+
+```{r}
+store %>% group_by(PRODUCT_TYPE) %>% 
+  summarise(AVERAGE_NET_PROFIT=mean(NET_PROFIT)) %>% 
+  ggplot(aes(x=PRODUCT_TYPE, y= AVERAGE_NET_PROFIT, group = 3))+
+  geom_line(color="lightblue", linewidth=1.3)+
+  geom_point(color = "#0099f9", size = 2)+
+  theme(text= element_text(size=7))+
+  geom_text(aes(label = round(AVERAGE_NET_PROFIT,2)), nudge_x = 0.3,
+            nudge_y = 0.2,
+            size = 3)+
+  theme_classic()+
+  labs(x="Product Type", y="Average Net Profit", title = "Average Net Profit of Product Type") 
+```
+
+Let's plot the Average Quantity and Average Net Profit of Product Type
+
+```{r}
+#Average quantity and AVERAGE NET PROFIT  of product type
+store %>% group_by(PRODUCT_TYPE) %>% 
+  summarise(AVERAGE_QUANTITY=mean(QUANTITY_DEMANDED),
+            AVERAGE_NET_PROFIT=mean(NET_PROFIT)) %>%
+  ggplot(aes(x=PRODUCT_TYPE))+
+  geom_col(aes(y = log10(AVERAGE_QUANTITY)), width=0.6, fill="brown")+
+  geom_line(aes(y=log10(AVERAGE_NET_PROFIT), group=1),color="lightblue", linewidth=1.3)+
+  geom_point(aes(y = log10(AVERAGE_NET_PROFIT)),color = "#0099f9", size = 2)+
+  geom_text(aes(y=log10(AVERAGE_NET_PROFIT),label =  round(log10(AVERAGE_NET_PROFIT),2)),
+            nudge_x = 0.1,
+            nudge_y = 0.1,
+            size = 3)+
+  theme(text= element_text(size=7))+ 
+  labs(x="PRODUCT TYPE", y="Log10 (Average Quantity & Average Net Profit)", title = "Average Quantity and Average Net Profit of Product Type") 
+```
+
+Plot histogram for QUANTITY DEMANDED of PRODUCT CATEGORY where PRODUCT TYPE is "snacks"
+
+```{r}
+# HISTOGRAM FOR QUANTITY_DEMANDED OF PRODUCT_CATEGORY WHERE PRODUCT_TYPE IS "snacks"
+store %>%
+  filter(PRODUCT_TYPE == "snacks") %>%
+  ggplot(aes(x=QUANTITY_DEMANDED, fill=PRODUCT_CATEGORY))+geom_histogram(binwidth = 30)+
+  labs(x="QUANTITY DEMANDED", title = "QUANTITY DEMANDED of PRODUCT CATEGORY", 
+       subtitle="Where: PRODUCT_TYPE = 'snacks'")
+
+```
+
+Plot average net profit for product type in each company
+
+```{r}
+# PLOT FOR AVERAGE_NET_PROFIT & COMPANY
+
+store %>% group_by(PRODUCT_TYPE, COMPANY) %>% 
+  summarise(AVERAGE_NET_PROFIT=mean(NET_PROFIT, na.rm=TRUE)) %>%
+  ggplot(aes(x=PRODUCT_TYPE, y=AVERAGE_NET_PROFIT, group=COMPANY, colour = COMPANY))+
+  geom_line()+ theme(text= element_text(size=9.5))+
+  ggtitle("Average net profit for product type in each company")
+```
+
+
+
+Let's make a pie chart for each HYGIENE PRODUCT'S QUANTITY DEMANDED
+
+```{r}
+#LET'S PREPARE REQUIRD DATA
+
+hygiene_prod <-  store %>% filter(PRODUCT_TYPE=="hygiene")%>%
+  group_by(PRODUCT_CATEGORY)%>%
+  summarise(QUANTITY_DEMANDED=sum(QUANTITY_DEMANDED))
+
+# LET'S CALCULATE PERCENTAGE OF EACH PRODUCT
+
+hygiene_prod_perc <- hygiene_prod %>% 
+  arrange(desc(PRODUCT_CATEGORY)) %>%
+  mutate(percentage=round(QUANTITY_DEMANDED*100/sum(QUANTITY_DEMANDED),2)) %>% 
+  mutate(y_pos = cumsum(percentage)-0.5*percentage)
+
+# LET'S CREATE THE PIE CHART
+hygiene_prod_perc %>% ggplot(aes(x="", percentage, fill = PRODUCT_CATEGORY))+
+  geom_bar(width = 1, stat = "identity", color="grey", alpha=0.6)+
+  coord_polar("y", start = 0)+
+  geom_text(aes(y=y_pos, label = paste0(percentage, "%")), color="black")+
+  scale_fill_manual(values = rainbow(7))+
+  ggtitle("PERCENTAGE OF HYGIENE PRODUCT'S QUANTITY DEMANDED")+
+  theme_void()
+
+```
+
+Plot a donut chart for same data
+```{r}
+# LET'S MAKE A DONUT FOR THE SAME DATA
+
+hygiene_prod_perc %>% ggplot(aes(x=2, percentage, fill = PRODUCT_CATEGORY))+
+  geom_bar(stat = "identity", color="grey", alpha=0.6)+
+  coord_polar(theta = "y", start = 3)+
+  geom_text(aes(y=y_pos, label = paste0(percentage, "%")), color="black")+
+  ggtitle("A DONUT CHART OF HYGIENE PRODUCT'S QUANTITY DEMANDED")+
+  scale_fill_manual(values = rainbow(7))+ theme_void() + xlim(0.6,2.6)
+```
+
+
+Correlation refers to the statistical concept that studies the relationship between two quantitative variables. Let's find and plot the correlation martix of numerical variables using ggcorrplot package.
+
+```{r}
+numeric_var<- select_if(store, is.numeric) # get numerical features
+r_corr<-cor(numeric_var, use = "complete.obs")
+
+#PLOT THE CORRELATION MATRIX (HEAT MAP)
+ggcorrplot(r_corr, lab = TRUE)
+
+# PLOT THE SORTED UPPER TRIANGLE HEAT MAP
+ggcorrplot(r_corr,hc.order = TRUE, type = "upper", lab = TRUE)
+
+```
+
+
+
+Let's know the distribution of some numerical variables.
+
+```{r}
+# plot histogram & density of cost_price
+ggplot(store, aes(x= COST_PRICE))+
+  geom_histogram(aes(y=..density..), binwidth=30, colour="black", fill="white")+
+  geom_density(alpha=.2, fill="#FF6666")+
+  ggtitle("Distribution & Density of cost price")
+```
+
+
+Density and Distribution of numerical variables
+
+```{r}
+numeric_var<- colnames(select_if(store, is.numeric))
+
+ExpTwoPlots(store, iv_variables = numeric_var,
+            lp_geom_type = "histogram",
+            lp_arg_list=list(fill = "white",color = "red",  binwidth=30),
+            rp_geom_type= "density",
+            rp_arg_list = list(alpha=0.5, fill="red"),
+            page = c(3,2)
+            )
+```
+
+
+Let's dive more about statistics in numerical variables using ExpNumStat() function in smartEDA package.
+```{r}
+ExpNumStat(store)
+```
+
+The distribution of all numeric variables are right-tail distribution. As shown histogram and density in the above graph, there is other two ways I can confirm this claim.  First, all mean of numerical variables are greater than their median, this indicates that the distribution is right-tailed. Secondly, all the skewness values are greater than 0, this shows this right-tailed distribution. There is highly positive skewness variables such NET_PROFIT, PROFIT_PERCENT , and PROFIT. and moderate skewness variables include COST_PRICE, SELLING_PRICE, and QUANTITY_DEMANDED.
+
+In addition, the Kurtosis indicates the presence of outliers. Until now, there is one variable which have high Kurtosis value (NET_PROFIT). This shows there is more outliers in this variable, but I'll confirm by plotting boxplot using smartEDA package.
+
+
+
+```{r}
+ExpNumViz(store, target = "PRODUCT_TYPE",type = 3, Page = c(3,2), gtitle = "Boxplot of numerical variables")
+```
+
+As the result above shows, NET_PROFIT, PROFIT_PERCENT , and PROFIT have more outliers than other variables. Specialy, NET_PROFIT variable contain most outliers compared with others. This confirm the fact that NET_PROFIT has high Kurtosis value (28.8).
+
+
+**Note:** If you are preparing this data for modeling, you need to solve and transform some of issues in variables like skewness of numerical variables and remove outliers.
+
