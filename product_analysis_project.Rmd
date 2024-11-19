@@ -3,8 +3,8 @@ title: "Product Analysis"
 author: "Mukhtaar Ismail"
 date: "2024-09-10"
 output:
-  html_document: default
   pdf_document: default
+  html_document: default
 ---
 
 
